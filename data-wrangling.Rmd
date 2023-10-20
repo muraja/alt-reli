@@ -1,0 +1,352 @@
+---
+title: "Data Wrangling"
+author: "Sami Muraja & Maria Kokkinen"
+date: "2023-10-20"
+output: html_document
+---
+# Data Preparation
+
+Load data:
+
+```{r eval = FALSE}
+library(qs)
+qs::qload(file="//research.uefad.uef.fi/groups/ostpre_projects/kokkinen/yksdata.qs")
+```
+
+Rename data
+
+```{r}
+library(tidyverse)
+source("rename-data.R")
+```
+
+Separating the scales:
+
+```{r}
+# creating the helpers Allardt & Gierveld
+Allardt <- c("interest.A", "happy.A", "easy.A", "lonely.A")
+Gierveld <- c("rely.G", "trust.G", "close.G", "empty.G", "around.G", "reject.G")
+
+# separating the scales into data frames ALS and DJGLS
+ALS <- SCALES %>% select(ID, all_of(Allardt))
+DJGLS <- SCALES %>% select(ID, all_of(Gierveld))
+```
+
+### Correcting Multiple Answers
+
+Distribution of the responses, excluding `ID`:
+
+```{r}
+SCALES[-1] %>% unlist %>% table %>% barplot
+```
+
+The plot shows that there are values beyond the response options of the 4 and 5-step Likert scales. This is because some respondents circled multiple Likert steps on the paper form (MA). Some drew a question mark on the paper, which is coded as 9.
+
+The number of such responses is low:
+
+```{r}
+SCALES[-1] %>% unlist %>% table %>% as.data.frame
+```
+
+The proportion of values over 5 being:
+
+```{r}
+n_MA <- sum(table(unlist(SCALES[-1]))[6:19], na.rm = TRUE)
+N <- sum(table(unlist(SCALES[-1])), na.rm = TRUE) 
+n_MA/N # proportion of MA out of all data
+```
+
+The question marks were coded as missing values:
+
+```{r}
+# removing values 9 (question mark)
+ALS[-1][ALS[-1] == 9] <- NA
+DJGLS[-1][DJGLS[-1] == 9] <- NA
+```
+
+The MA values are replaced with 1. the most informative value (e.g. if a respondent circled both "very interesting" and "somewhat interesting, it is coded as"very interesting") 2. missing value if the most informative value cannot be determined (e.g. if a respondent circled both "somewhat interesting" and "somewhat uninteresting", it is coded as a missing value)
+
+Because the data uses three different Likert scales, this code is in three parts.
+
+ALS, excluding `lonely.A` ; scales from 1-4 and Cannot Say (5) options:
+
+```{r}
+ALS[2:4][ALS[2:4] == 12] <- 1
+ALS[2:4][ALS[2:4] == 13] <- 1
+ALS[2:4][ALS[2:4] == 23] <- NA
+ALS[2:4][ALS[2:4] == 25] <- 2
+ALS[2:4][ALS[2:4] == 35] <- 3
+ALS[2:4][ALS[2:4] == 45] <- 4
+```
+
+The `lonely.A` item of ALS; scale from 1-3 and Cannot Say (4) options:
+
+```{r}
+ALS[5][ALS[5] == 13] <- NA
+ALS[5][ALS[5] == 23] <- 3
+ALS[5][ALS[5] == 24] <- 2
+ALS[5][ALS[5] == 34] <- 3
+```
+
+Items of the DJGLS-6; scales from 1-5:
+
+```{r}
+DJGLS[-1][DJGLS[-1] == 12] <- 1
+DJGLS[-1][DJGLS[-1] == 13] <- 1
+DJGLS[-1][DJGLS[-1] == 14] <- 1
+DJGLS[-1][DJGLS[-1] == 15] <- NA
+DJGLS[-1][DJGLS[-1] == 23] <- 2
+DJGLS[-1][DJGLS[-1] == 24] <- NA
+DJGLS[-1][DJGLS[-1] == 25] <- 5
+DJGLS[-1][DJGLS[-1] == 34] <- 4
+DJGLS[-1][DJGLS[-1] == 35] <- 5
+DJGLS[-1][DJGLS[-1] == 45] <- 5
+DJGLS[-1][DJGLS[-1] == 123] <- 1
+DJGLS[-1][DJGLS[-1] == 234] <- NA
+DJGLS[-1][DJGLS[-1] == 345] <- 5
+```
+
+```{r}
+#check that replaced correctly
+barplot(table(unlist(ALS[2:4])), 
+        main = "ALS excl. lonely.A",
+        names.arg = c("1", "2", "3", "4", "CS")) # should have values between 1-5
+barplot(table(unlist(ALS[5])),
+        main = "lonely.A",
+        names.arg = c("1", "2", "3", "CS"))   # should have values between 1-4
+barplot(table(unlist(DJGLS[-1])),
+        main = "DJGLS",
+        names.arg = c("1", "2", "3", "4", "5"))  # should have values between 1-5
+```
+
+### Key reversion
+
+```{r}
+# DJGLS with negative questions reverse coded
+reverse_col <- c("empty.G", "around.G", "reject.G")
+DJGLS[, reverse_col] = 6 - DJGLS[, reverse_col]
+```
+
+```{r}
+lonely_rev <- ALS$lonely.A
+lonely_rev[lonely_rev == 4] <- -0 # the following line would convert 4 (CS) into 0, but as -0 it will stay as 4
+lonely_rev = 4 - lonely_rev
+ALS$lonely.A <- lonely_rev
+```
+
+Plotting the item response distributions with reversions
+
+```{r}
+# transforming the dataframes into long form
+DJGLS.L <- DJGLS %>%
+  pivot_longer(cols = all_of(Gierveld))
+
+# plotting items of DJGLS with reversion
+DJGLS.L[-1] %>%  
+  ggplot(aes(value)) + 
+  facet_wrap("name", scales = "free") + 
+  geom_bar() + 
+  ggtitle("DJGLS with reversions")
+
+# plotting items of A with reversion
+ALS.L <- ALS %>%
+  pivot_longer(cols = all_of(Allardt))
+
+ALS.L %>% 
+  ggplot(aes(value)) + 
+  facet_wrap("name", scales = "free") + 
+  geom_bar() + 
+  ggtitle("ALS with reversions")
+```
+
+### Cannot Say -responses in ALS
+
+The ALS scale has a Cannot Say -response option (CS) in all its items. These make up
+
+```{r}
+CS4 <- table(unlist(ALS[5]))[4] %>% as.vector
+CS5 <- table(unlist(ALS[2:4]))[5] %>% as.vector
+ALS_count <- sum(table(unlist(ALS[-1]))) %>% as.vector
+
+# proportion of CS out of all responses
+(CS4+CS5) / ALS_count 
+#############################table(unlist(is.na(ALS[-1])))[2] %>% as.vector
+```
+
+of the total responses. These can be interpreted as 1) neutral values or 2) missing values. We explored both. 
+
+#### CS as neutral values
+
+```{r}
+CSNe <- ALS[1]
+
+# moving CS of ALS (excl. lonely.A) to the middle
+respread <- function(x){ifelse(x > 2, x + 1, x)}
+CSis3 <- function(x){ifelse(x == 6, 3, x)}
+CSNe[2:4] <- apply(ALS[2:4], 2, respread)
+CSNe[2:4] <- apply(CSNe[2:4], 2, CSis3)
+
+# converting CS of lonely.A 
+CSis2 <- function(x){ifelse(x == 4, 2, x)}
+CSNe[5] <- apply(ALS[5], 2, CSis2)
+
+# fixing the names
+CSNe <- CSNe %>% rename(
+  "interest.A" = "V1",
+  "happy.A" = "V2",
+  "easy.A" = "V3")
+CSNe <- CSNe %>% rename("lonely.A" = "V1")
+
+# comparison to originals (to check for errors)
+par(mfrow = c(2,2))
+barplot(table(unlist(CSNe[2:4])), 
+        main = "ALS, excl. lonely.A, CS is neutral",
+        names.arg = c("1", "2", "CS", "4", "5"))
+barplot(table(unlist(CSNe[5])), 
+        main = "lonely.A, CS is neutral",
+        names.arg = c("1", "2 + CS","3"))
+barplot(table(unlist(ALS[2:4])), 
+        main = "ALS, excl. alone (original)",
+        names.arg = c("1", "2","3","4","CS"))
+barplot(table(unlist(ALS[5])), 
+        main = "lonely.A (original)",
+        names.arg = c("1", "2","3", "CS"))
+```
+
+Let's see how the proportion of missing values looks like in ALS when the CS are interpreted as neutral:
+
+```{r}
+p <- function(x) {sum(is.na(x))/length(x)}
+apply(CSNe,2,p)
+# proportion of missing item-wise observations (entries) is the average of these
+apply(CSNe,2,p) %>% sum()/4
+```
+
+#### CS as missing values
+
+```{r}
+library(naniar)
+# coding CS responses as missing values
+CSNA <- ALS %>% 
+  replace_with_na_at(.vars = c("interest.A","happy.A", "easy.A"), 
+                     condition = ~.x == 5) %>% 
+  replace_with_na(replace = list(lonely.A = 4))
+```
+
+Let's see how the proportion of missing values looks like in ALS when the CS are interpreted as missing values:
+
+```{r}
+apply(CSNA,2,p)
+# proportion of missing item-wise observations (entries) is the average of these
+apply(CSNA,2,p) %>% sum()/4
+```
+
+### Missing values
+
+Proportion of missing values:
+
+```{r}
+apply(CSNA,2,p)
+apply(CSNe,2,p)
+apply(DJGLS,2,p)
+```
+
+#### Removing rows with multiple missing values
+
+```{r}
+# saving datasets without row removal for later use
+DJGLS. <- DJGLS
+
+# removing rows with more than one missing value
+DJGLS <- DJGLS[!rowSums(is.na(DJGLS)) > 1,]
+CSNA <- CSNA[!rowSums(is.na(CSNA)) > 1,]
+CSNe <- CSNe[!rowSums(is.na(CSNe)) > 1,]
+```
+
+#### Imputations
+
+```{r}
+# function version would look like this, although it's now included in the relisens, making it inefficient computing-wise but a lot easier to use. Should we just mention here which imputation methods will be used and delete these? I think these are only used in the correlation thingies in the following section and under Item variations->Correlations.
+
+library(mice)
+library(haven)
+# Mean imputation
+  mean_imp <- function(data){
+    data %>% 
+    mutate_all(~ifelse(is.na(.x), mean(.x, na.rm = TRUE), .x)) 
+    }
+# deterministic
+  det_imp <- function(data){
+    data %>% 
+    zap_labels %>% 
+    mice(method = "norm.predict", m=1) %>% 
+    complete
+    }
+# stochastic linear regression imputation
+  sto_imp <- function(data){
+    data %>% 
+    zap_labels %>% 
+    mice(method = "norm.nob", m = 1) %>% 
+    complete
+  }
+```
+
+```{r}
+# applying
+# CSNA
+CSNA_mean <- CSNA[1]
+CSNA_mean[2:5] <- mean_imp(CSNA[-1])
+
+CSNA_det <- CSNA[1]
+CSNA_det[2:5] <- det_imp(CSNA[-1])
+
+CSNA_sto <- CSNA[1]
+CSNA_sto[2:5] <- sto_imp(CSNA[-1])
+
+# CSNe
+CSNe_mean <- CSNe[1]
+CSNe_mean[2:5] <- mean_imp(CSNe[-1])
+
+CSNe_det <- CSNe[1]
+CSNe_det[2:5] <- det_imp(CSNe[-1])
+
+CSNe_sto <- CSNe[1]
+CSNe_sto[2:5] <- sto_imp(CSNe[-1])
+
+# DJGLS
+DJGLS_mean <- DJGLS[1]
+DJGLS_mean[2:7] <- DJGLS[-1] %>% mean_imp
+
+DJGLS_det <- DJGLS[1]
+DJGLS_det[2:7] <- DJGLS[-1] %>% det_imp
+
+DJGLS_sto <- DJGLS[1]
+DJGLS_sto[2:7] <- DJGLS[-1] %>% sto_imp
+
+```
+
+Descriptive statistics of CSNe_det & DJGLS_det
+
+```{r}
+library(e1071)
+
+apply(DJGLS_det[-1], 2, mean) %>% round(3)
+apply(DJGLS_det[-1], 2, sd) %>% round(3)
+lapply(DJGLS_det[-1], na.rm=TRUE, skewness, type=2) %>% as.data.frame %>% round(3)
+lapply(DJGLS_det[-1], na.rm=TRUE, kurtosis, type=2) %>% as.data.frame %>% round(3)
+
+apply(CSNe_det[-1], 2, mean) %>% round(3)
+apply(CSNe_det[-1], 2, sd) %>% round(3)
+lapply(CSNe_det[-1], na.rm=TRUE, skewness, type=2) %>% as.data.frame %>% round(3)
+lapply(CSNe_det[-1], na.rm=TRUE, kurtosis, type=2) %>% as.data.frame %>% round(3)
+
+apply(CSNA_det[-1], 2, mean) %>% round(3)
+apply(CSNA_det[-1], 2, sd) %>% round(3)
+lapply(CSNA_det[-1], na.rm=TRUE, skewness, type=2) %>% as.data.frame %>% round(3)
+lapply(CSNA_det[-1], na.rm=TRUE, kurtosis, type=2) %>% as.data.frame %>% round(3)
+```
+
+```{r}
+save.image(file = "wrangled-data.RData")
+```
+

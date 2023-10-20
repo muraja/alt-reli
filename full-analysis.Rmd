@@ -1,0 +1,46 @@
+---
+title: "Empirical comparison of reliability coefficients using congeneric data: estimates for Allardt’s Life Satisfaction Scale and De Jong Gierveld 6-item Loneliness Scale"
+author: "Sami Muraja & Maria Kokkinen"
+date: "2023-10-20"
+output: 
+  rmdformats::readthedown:
+    toc_depth: 6
+    fig_width: 8
+    fig_height: 5
+    fig_caption: TRUE
+---
+
+```{r setup, include=FALSE, echo = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Last updated:
+```{r}
+date()
+```
+
+Loading raw data:
+```{r}
+library(qs)
+qs::qload(file="raw-data.qs")
+```
+
+***
+
+```{r child = "data-wrangling.Rmd"}
+
+```
+
+***
+
+```{r child = "reliability-analysis.Rmd"}
+
+```
+
+*** 
+
+```{r child = "scale-comparison.Rmd"}
+
+```
+
+***

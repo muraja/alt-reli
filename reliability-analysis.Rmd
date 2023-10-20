@@ -1,0 +1,228 @@
+---
+title: "Reliability analysis"
+author: "Sami Muraja & Maria Kokkinen"
+date: "2023-10-20"
+output: html_document
+---
+
+# Reliability Analysis
+
+Load data:
+```{r eval = FALSE}
+load("wrangled-data.RData")
+library(tidyverse)
+library(psych)
+```
+
+```{r, eval = FALSE}
+# to see the results without the around.G reversed, run this before the rest
+DJGLS[, "around.G"] = 6 - DJGLS[, "around.G"]
+DJGLS.[, "around.G"] = 6 - DJGLS.[, "around.G"]
+```
+
+## Testing the assumptions of the tau-equivalent model
+
+### Unidimensionality & Tau-equivalence
+
+#### DJGLS
+Making a scree plot:
+```{r}
+# pca
+results <- prcomp(DJGLS_det[-1])
+results$rotation %>% as.data.frame
+
+# calculate total variance explained by each principal component
+var_explained = results$sdev^2 / sum(results$sdev^2)
+
+#create scree plot
+qplot(c(1:6),var_explained) + 
+  geom_line() + 
+  xlab("Principal Component") + 
+  ylab("Variance Explained") +
+  ggtitle("Scree Plot G") +
+  ylim(0, 1)
+```
+
+
+```{r}
+library(psych)
+fa(DJGLS_det[-1], nfactors = 2, rotate = "oblimin")
+fa(DJGLS_det[-1], nfactors = 2, rotate = "varimax")
+```
+
+
+```{r}
+fa(DJGLS_det[-1], nfactors = 1, rotate = "oblimin")
+fa(DJGLS_det[-1], nfactors = 3, rotate = "oblimin")
+```
+
+
+```{r}
+library(psych)
+fa(DJGLS_mean[-1], nfactors = 2)
+fa(DJGLS_det[-1], nfactors = 2)
+fa(DJGLS_sto[-1], nfactors = 2)
+```
+The imputation method has a negligible influence on the factor analysis results with two factors.
+
+```{r}
+fa(DJGLS_det[-1], nfactors = 1)
+fa(DJGLS_det[-1], nfactors = 3)
+```
+One factor is evidently too little: the communalities in the emotional loneliness factor are all very low.
+
+#### ALS
+
+```{r}
+# In the 6-item G validation study they used pca, so checking how that works for this data
+r <- CSNe_det %>% 
+  select(-ID) %>% 
+  cor(use = "complete.obs")
+
+# with scree plot
+results <- prcomp(CSNe_det[-1])
+results$rotation %>% as.data.frame
+
+# scree plot
+#calculate total variance explained by each principal component
+var_explained = results$sdev^2 / sum(results$sdev^2)
+
+#create scree plot
+qplot(c(1:4),var_explained) + 
+  geom_line() + 
+  xlab("Principal Component") + 
+  ylab("Variance Explained") +
+  ggtitle("Scree Plot DJGLS") +
+  ylim(0, 1)
+```
+
+```{r}
+library(psych)
+# allardt, CSNA vs CSNe
+fa(CSNA[-1], nfactors = 1)
+#fa(A[-1], nfactors = 2)
+#fa(A[-1], nfactors = 3)
+
+fa(CSNe[-1], nfactors = 1)
+#fa(CSNe[2:5], nfactors = 2)
+#fa(CSNe[2:5], nfactors = 3)
+
+fa(CSNe_det[-1], 1) # imputation makes negligible difference
+```
+
+### Uncorrelated error terms
+
+```{r}
+library(lavaan)
+###
+scale <- 'ELF =~ empty.G + around.G + reject.G
+         SLF =~ rely.G + trust.G + close.G'
+Gfit <- cfa(scale, data=DJGLS_det[-1], std.lv=TRUE, auto.cov.lv.x=FALSE)
+residuals(Gfit)$cov
+
+###
+scale  <- 'f  =~ interest.A + happy.A + easy.A + lonely.A'
+CSNefit <- cfa(scale, data=CSNe_det[-1]) 
+residuals(CSNefit)$cov
+```
+
+## Reliability analysis with imputation sensitivity testing
+
+```{r}
+# loading scripts compiled by Reijo Sund. They can be downloaded from https://github.com/rsund/reliab
+#source("factor_score_reliability.R")
+source("reli-fun.R")
+
+# loading an extension of these functions that includes preparation of the data and imputation sensitivity testing
+source("relisens.R")
+```
+
+### DJGLS
+
+```{r}
+relisens(DJGLS[-1], 2, method = "score")
+```
+
+```{r}
+relisens(DJGLS[-1], 2, method = "sum")
+```
+
+```{r}
+relisens(DJGLS[-1], 2, method = "image")
+```
+
+```{r}
+source("crelisens.R")
+crelisens(DJGLS[-1], items.until = 3)
+```
+
+#### DJGLS per factor
+
+##### SLF - Social loneliness factor
+
+```{r}
+SLF <- DJGLS. %>% select(rely.G, trust.G, close.G)
+SLF <- SLF[!rowSums(is.na(SLF)) > 1,]
+
+relisens(SLF, 1, method = "score") 
+relisens(SLF, 1, method = "sum") 
+relisens(SLF, 1, method = "image") 
+crelisens(SLF, items.until = 3)
+```
+
+##### ELF - Emotional loneliness factor
+
+```{r}
+ELF <- DJGLS. %>% select(empty.G, around.G, reject.G)
+ELF <- ELF[!rowSums(is.na(ELF)) > 1,]
+
+relisens(ELF, 1, method = "score") 
+relisens(ELF, 1, method = "sum") 
+relisens(ELF, 1, method = "image") 
+crelisens(ELF, items.until = 3)
+```
+
+### ALS
+
+```{r}
+relisens(CSNe[-1], 1, method = "score")
+```
+
+```{r}
+relisens(CSNe[-1], 1, method = "sum")
+```
+
+```{r}
+relisens(CSNe[-1], 1, method = "image")
+```
+
+```{r}
+crelisens(CSNe[-1], 4)
+```
+
+
+#### Influence of CS as neutral (CSNe) versus CS as missing value (CSNA)
+
+```{r}
+CS_diff <- function(reliNe, reliNA){
+  diffNANe <- reliNA %>% as.data.frame()
+  #diff[3:10] <- reliNALS[3:10] - reliNe[3:10]
+  diffNANe[3:6] <- reliNe[3:6] - reliNA[3:6]
+  diffNANe[3:6] <- diffNANe[3:6] %>% format(digits = 2)
+  diffNANe
+}
+# factor scores
+reliNA <- CSNA[-1] %>% relisens(1, round = F)
+reliNe <- CSNe[-1] %>% relisens(1, round = F)
+CS_diff(reliNe, reliNA)
+
+# unweighted sums
+reliNA <- CSNA[-1] %>% relisens(1, round = F, method = "sum")
+reliNe <- CSNe[-1] %>% relisens(1, round = F, method = "sum")
+CS_diff(reliNe, reliNA)
+
+# factor images
+reliNA <- CSNA[-1] %>% relisens(1, round = F, method = "image")
+reliNe <- CSNe[-1] %>% relisens(1, round = F, method = "image")
+CS_diff(reliNe, reliNA)
+```

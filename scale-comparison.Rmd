@@ -1,0 +1,475 @@
+---
+title: "Comparison of the loneliness item of ALS with DJGLS"
+author: "Sami Muraja & Maria Kokkinen"
+date: "2023-10-20"
+output: html_document
+---
+# Comparison of the loneliness item of Allardt's Life Satisfaction Scale with De Jong Gierveld Loneliness Scale
+
+Load data:
+
+```{r eval = FALSE}
+load("wrangled-data.RData")
+library(tidyverse)
+```
+
+Exploring how the loneliness item of ALS (ALS-L) relates to the validated DJGLS-6.
+
+### Exploring distributions
+
+Examining the distributions of the loneliness item of ALS (ALS-L/alone.A?) and the DJGLS-6.
+
+Plotting the distribution of the reversed DJGLS (so that higher = more lonely) with lonely.A responses as the fill:
+
+```{r}
+
+# joining the data of both scales to one set (no recoding of CS or imputations done)
+SCALES_rev <- full_join(ALS, DJGLS, by = "ID") 
+
+
+# transforming the dataframe into long form
+alone.G_L <- SCALES_rev %>% 
+  select(ID, lonely.A, all_of(Gierveld)) %>% 
+  mutate_all(~ifelse(lonely.A==4, "CS", .x)) %>% 
+  pivot_longer(cols = c("rely.G", "trust.G", "close.G", "empty.G", "around.G", "reject.G"))
+
+# plotting
+alone.G_L %>% 
+  ggplot(aes(x = value)) +
+  geom_bar(aes(fill = lonely.A)) +
+  scale_x_continuous(limits = c(.5,5.5))
+#### 3744 removed rows???
+```
+
+The bar plot shows the distribution of the DJGLS with reversions, where 5 = very lonely, 1 = not lonely at all. The colors signify the reversed lonely.A, where 1 = not lonely at all (red), 3 = very lonely (blue).
+
+Visually, it doesn't seem that the distribution of lonely.A is similar to the one of DJGLS: those very lonely according to lonely.A spread rather evenly in their responses in DJGLS, and there's a big proportion of "not at all lonely" respondents even in the loneliest response category of DJGLS. As a side note, this distribution does seem to somewhat support the idea of interpreting CS responses as neutral responses, as those tend to heavily place in the neutral responses of DJGLS. However, this graph is per item, so it could be, for example, that some items will be low even if the total scale result would be high.
+
+Let's see what the distribution of lonely.A looks like compared to the row means of DJGLS:
+
+```{r}
+# creating a dataframe with the row means of DJGLS and lonely.A
+GMeans_aloNA <- SCALES_rev %>% 
+  select(ID, lonely.A, all_of(Gierveld)) %>% 
+  mutate(GMeans = rowMeans(.[,3:8], na.rm = F)) # na.rm breaks the distribution. But note that because of this rows with missing values have been removed!
+
+# plotting
+GMeans_aloNA  %>% 
+  mutate_all(~ifelse(lonely.A==4, "CS", .x)) %>%
+  ggplot(aes(x = GMeans)) +
+  geom_bar(aes(fill = lonely.A)) +
+  scale_x_continuous(limits = c(.9,5))
+```
+
+Here the distribution looks more like what we would expect, seeing more of the pattern of high loneliness responses to lonely.A corresponding to high loneliness responses of the DJGLS. Very few of those who respond to lonely.A "not lonely at all" will be lonely (\>3) in the responses of the DJGLS. However, it does seem that lonely.A is worse at recognizing the loneliest: many of the loneliest according to the DJGLS will still respond to the lonely.A with 2 (somewhat lonely). This graph, too, seems to support the interpretation of CS as neutral: the distributions of "cannot say" and "somewhat lonely" (2) match decently.
+
+Further examining the distributions with the factors of the DJGLS considered separately.
+
+Emotional loneliness and lonely.A:
+
+```{r}
+# Emotional loneliness factor of DJGLS and lonely.A
+
+EmoMeans_aloNA <- SCALES_rev %>% 
+  select(ID, empty.G, around.G, reject.G, lonely.A) %>% 
+  mutate(GMeans = rowMeans(.[,3:5], na.rm = F)) # na.rm breaks the distribution. But note that because of this rows with missing values have been removed!
+
+# plotting
+EmoMeans_aloNA  %>% 
+  mutate_all(~ifelse(lonely.A==4, "CS", .x)) %>% 
+  ggplot(aes(x = GMeans)) +
+  geom_bar(aes(fill = lonely.A)) +
+  scale_x_continuous(limits = c(.9,5))
+```
+
+Social loneliness and lonely.A:
+
+```{r}
+# Social loneliness factor of DJGLS and lonely.A
+
+SosMeans_aloNA <- SCALES_rev %>% 
+  select(ID, lonely.A, rely.G, trust.G, close.G) %>% 
+  mutate(GMeans = rowMeans(.[,3:5], na.rm = F)) # na.rm breaks the distribution. But note that because of this rows with missing values have been removed!
+
+# plotting
+SosMeans_aloNA  %>% 
+  mutate_all(~ifelse(lonely.A==4, "CS", .x)) %>% 
+  ggplot(aes(x = GMeans)) +
+  geom_bar(aes(fill = lonely.A)) +
+  scale_x_continuous(limits = c(.9,5))
+```
+
+We can see that here, lonely.A seems to be a lot more closely related to emotional loneliness than social loneliness.
+
+### Joining the datasets
+
+Before further analyses, joining the datasets and performing imputation for the new dataset which combines DJGLS and ALS (CSNe version of the data).
+
+```{r}
+# joining the datasets:
+aloNe <- CSNe %>% select(ID, lonely.A) # CSNe version of lonely.A
+G_aloNe <- full_join(DJGLS., aloNe, by = "ID")
+
+# checking missing values
+apply(G_aloNe,2,p) # 1.65
+```
+
+#### Imputation
+
+```{r}
+# Imputations
+library(mice)
+library(haven)
+G_aloNe_mean <- mean_imp(G_aloNe) # mean imputation
+G_aloNe_det <- det_imp(G_aloNe) # deterministic regression
+G_aloNe_sto <- sto_imp(G_aloNe) # stochastic regression imputation
+```
+
+### Correlations
+
+```{r}
+
+library(corrplot)
+
+# Correlation between lonely.A and row means of the DJGLS:
+
+# plotting
+GMeans_aloNA[-1] %>% 
+  cor(use = "complete.obs") %>% 
+  corrplot(method = "number") 
+
+# the correlation
+cor(GMeans_aloNA$lonely.A, 
+    GMeans_aloNA$GMeans, 
+    use = "complete.obs") %>% 
+  round(2)
+
+
+# item-wise correlations without means of DJGLS, with deterministic imputed data, CS in alone.A recoded as neutral (CSNe)
+G_aloNe_det[-1] %>% 
+  cor(use = "complete.obs") %>% 
+  corrplot(method = "number", type = "lower")
+
+```
+
+```{r}
+# Correlations with factors of the DJGLS separately:
+
+# correlation between lonely.A and the emotional factor of DJGLS
+cor(EmoMeans_aloNA$lonely.A, 
+    EmoMeans_aloNA$GMeans, 
+    use = "complete.obs", ) %>% 
+  round(2)
+
+# correlation between lonely.A and the social factor of DJGLS
+cor(SosMeans_aloNA$lonely.A, 
+    SosMeans_aloNA$GMeans, 
+    use = "complete.obs") %>% 
+  round(2)
+
+```
+
+```{r}
+# Correlations calculated through factor scores
+
+library(psych)
+
+# factors as variables
+EMO <- G_aloNe_det %>% select(empty.G, reject.G, around.G) 
+SOS <- G_aloNe_det %>% select(rely.G, trust.G, close.G) 
+
+# factor scores of social loneliness factor, emotional loneliness factor and alone.A
+SOS_fs <- factor.scores(SOS, fa(SOS,1))
+EMO_fs <- factor.scores(EMO, fa(EMO,1))
+A_fs <- factor.scores(G_aloNe_det[2], fa(G_aloNe_det[2], 1))
+
+# correlations from the factor scores
+cor(SOS_fs$scores,A_fs$scores) # between SLF and alone.A
+cor(EMO_fs$scores,A_fs$scores) # between ELF and alone.A
+
+
+# correlation through the factors scores between DJGLS (as single-factor) and alone.A:
+FULL_fs <- factor.scores(G_aloNe_det[3:8], fa(G_aloNe_det[3:8],1))
+cor(FULL_fs$scores, A_fs$scores)
+
+```
+
+The correlation between lonely.A and the row means of the DJGLS is 0.32. The correlation between lonely.A and the emotional factor of the DJGLS is slightly lower at 0.29. The correlation between the social loneliness factor of the DJGLS and lonely.A is even lower at 0.22. According to correlations, it seems that lonely.A is more closely related to emotional loneliness.
+
+Calculating correlations from factor scores, correlation between lonely.A and the social factor of the DJGLS is 0.309 and the correlation between lonely.A and the emotional factor is 0.393. When treating the DJGLS as having a single-factor structure, the correlation between lonely.A and the DJGLS is 0.363.
+
+######Are we reporting only the correlations from factor scores here?
+
+### Fitting linear models
+
+Fitting a linear model with all items of the DJGLS:
+
+```{r}
+# fitting the model, the items of DJGLS as independent variables and alone.A as the dependent variable
+fit_aloNe <- lm(lonely.A ~ empty.G + rely.G + trust.G + close.G + around.G + reject.G, na.omit(G_aloNe_det))
+summary(fit_aloNe)
+
+# calculating odds ratios (OR) with confidence intervals (CI)
+OR <- coef(fit_aloNe) %>% exp
+CI <- confint(fit_aloNe) %>% exp
+cbind(OR, CI)
+```
+
+The sample size is large so the p-values are low, but the R-squared is low: the items of DJGLS only explain 26 % of the variance of lonely.A.
+
+Fitting linear models for the factors of the DJGLS separately:
+
+```{r}
+
+# a model with the items of emotional loneliness factor as independent variables and lonely.A as the dependent variable
+fit_emo_aloNe <- lm(lonely.A ~ empty.G + around.G + reject.G, na.omit(G_aloNe_det))
+summary(fit_emo_aloNe) 
+
+# a model with the items of social loneliness factor as independent variables and lonely.A as the dependent variable:
+fit_sos_aloNe <- lm(lonely.A ~ rely.G + trust.G + close.G, na.omit(G_aloNe_det))
+summary(fit_sos_aloNe) 
+```
+
+The R-squared is about 22 % for emotional loneliness and 10% for social loneliness. Conforming to plots drawn earlier, it shows that lonely.A is more strongly related to emotional loneliness than social loneliness.
+
+### EFA
+
+Performing EFA for a model where alone.A is added to the DJGLS-6, first with two-factor structure and then with three-factor structure:
+
+```{r}
+# With 2 factor structure
+
+# and also comparing the influence of imputation method
+fa(G_aloNe[-1], 2) # no imputation
+fa(G_aloNe_mean[-1], 2) # mean imputation
+fa(G_aloNe_det[-1], 2) # deterministic regression
+fa(G_aloNe_sto[-1], 2) # stochastic regression
+
+  # differences from imputation method are small with two-factor       structure
+```
+
+```{r}
+# With 3 factor structure 
+
+# and also comparing the influence of imputation method
+fa(G_aloNe[-1], 3)
+fa(G_aloNe_mean[-1], 3)
+fa(G_aloNe_det[-1], 3)
+fa(G_aloNe_sto[-1], 3)
+
+  #### differences are big here (in det, empty.G is as its own         factor whereas in other solutions it's lonely.A, also the          loading of around.G is differing)
+```
+
+In addition, performing EFA for a model where the weakest item of DJGLS (around.G) is replaced with the alone.A:
+
+```{r}
+# With 2 factor structure if excluding around.G (the weakest item of DJGLS)
+
+G_aloNe %>% select(-ID, -around.G) %>% fa(2)
+
+G_aloNe_mean %>% select(-ID, -around.G) %>% fa(2)
+G_aloNe_det %>% select(-ID, -around.G) %>% fa(2)
+G_aloNe_sto %>% select(-ID, -around.G) %>% fa(2)
+  # difference of imputation methods not remarkable
+
+```
+
+Concluding the results of EFA, the lonely.A seems to fit decently into the emotional loneliness factor of the DJGLS-6.
+
+### CFA
+
+Because the EFA results loaded around.G higher in the social loneliness factor despite the original theoretical models of the authors of the DJGLS-6, let's calculate some model fit measures for different factor splits:
+
+```{r}
+
+library(lavaan)
+
+# checking correlation of factors
+f1 <- G_aloNe_det %>% select(rely.G, trust.G, close.G)
+f2 <- G_aloNe_det %>% select(empty.G, around.G, reject.G, lonely.A)
+cor(f1, f2)
+
+
+# CFA for different models
+
+# the original model with one-factor solution:
+path <- 'f1 =~ rely.G + trust.G + close.G + empty.G + around.G + reject.G'
+model <- cfa(path, data=DJGLS_det, std.lv=TRUE, auto.cov.lv.x=FALSE)
+summary(model, fit.measures=TRUE,standardized=TRUE)
+
+
+# the original two-factor model: without lonely.A
+path <- 'f1 =~ rely.G + trust.G + close.G
+         f2 =~ empty.G + around.G + reject.G'
+model <- cfa(path, data=DJGLS_det, std.lv=TRUE, auto.cov.lv.x=FALSE)
+summary(model, fit.measures=TRUE,standardized=TRUE)
+  # CFI = 0.951, TLI = 0.907
+  # RMSEA = 0.094 (poor fit)
+
+
+# a model with addition: with lonely.A
+path <- 'f1 =~ rely.G + trust.G + close.G
+         f2 =~ empty.G + around.G + reject.G + lonely.A'
+model <- cfa(path, data=G_aloNe_det, std.lv=TRUE, auto.cov.lv.x=FALSE)
+summary(model, fit.measures=TRUE,standardized=TRUE)
+  # CFI = 0.942, TLI = 0.906
+    # including lonely.A reduces CFI & TLI
+  # RMSEA = 0.090 (poor fit)
+
+
+# a model with replacement: with lonely.A but without around.G
+path <- 'f1 =~ rely.G + trust.G + close.G
+         f2 =~ empty.G + reject.G + lonely.A'
+model <- cfa(path, data=G_aloNe_det, std.lv=TRUE, auto.cov.lv.x=FALSE)
+summary(model, fit.measures=TRUE,standardized=TRUE)
+  # CFI = 0.988, TLI = 0.978
+  # RMSEA = 0.050 (poor fit)
+
+
+# a model with lonely.A as its own factor
+path <- 'f1 =~ rely.G + trust.G + close.G
+         f2 =~ empty.G + reject.G + around.G
+         f3 =~ lonely.A'
+model <- cfa(path, data=G_aloNe_det, std.lv=TRUE, auto.cov.lv.x=FALSE)
+summary(model, fit.measures=TRUE,standardized=TRUE)
+  # CFI = 0.943, TLI = 0.901
+  # RMSEA = 0.093 (poor fit)
+```
+
+The best option seems to be replacing around.G with lonely.A. However, this might be because of how poorly around.G works in this data instead of about lonely.A working that well, so testing with around.G moved to the social loneliness factor:
+
+```{r}
+
+# without lonely.A but around.G in the social factor
+path <- 'f1 =~ rely.G + trust.G + close.G + around.G
+         f2 =~ empty.G + reject.G'
+model <- cfa(path, data=DJGLS_det, std.lv=TRUE, auto.cov.lv.x=FALSE)
+summary(model, fit.measures=TRUE,standardized=TRUE)
+  # CFI = 0.983, TLI = 0.969
+  # RMSEA = 0.055
+
+
+# with lonely.A, around.G moved to a F1 (social loneliness)
+path <- 'f1 =~ rely.G + trust.G + close.G + around.G
+         f2 =~ empty.G + reject.G + lonely.A'
+model <- cfa(path, data=G_aloNe_det, std.lv=TRUE, auto.cov.lv.x=FALSE)
+summary(model, fit.measures=TRUE,standardized=TRUE)
+  # CFI = 0.968, TLI = 0.948
+  # RMSEA = 0.067 (reasonably approximate fit)
+```
+
+Trying what happens if we allowed cross factor structure for around.G:
+
+```{r}
+
+# allowing around.G to spread onto both factors
+path <- 'f1 =~ rely.G + trust.G + close.G + around.G
+         f2 =~ empty.G + reject.G + around.G'
+model <- cfa(path, data=DJGLS_det, std.lv=TRUE, auto.cov.lv.x=FALSE)
+summary(model, fit.measures=TRUE,standardized=TRUE)
+  # CFI = 0.998, TLI = 0.995
+  # RMSEA = 0.022
+
+
+# cross-factor model with lonely.A added
+path <- 'f1 =~ rely.G + trust.G + close.G + around.G
+         f2 =~ empty.G + reject.G + around.G + lonely.A'
+model <- cfa(path, data=G_aloNe_det, std.lv=TRUE, auto.cov.lv.x=FALSE)
+summary(model, fit.measures=TRUE,standardized=TRUE)
+  # CFI = 0.986, TLI = 0.975
+  # RMSEA = 0.047
+```
+
+The model fit improves notably by allowing around.G to spread onto two factors. Including lonely.A is not a good addition in this model.
+
+
+### Calculating reliabilities
+
+The reliabilities calculated with factor scores:
+
+Reliabilities with lonely.A added:
+
+```{r}
+source("relisens.R")
+source("reli-fun.R")
+relisens(G_aloNe[-1], 2, method = "score")
+```
+
+Reliability coefficients when replacing the weakest item `around.G` with `lonely.A`. First with the full scale:
+
+```{r}
+G_aloNe %>% select("rely.G", "trust.G", "close.G", "empty.G","reject.G", "lonely.A") %>% 
+  relisens(2, method = "score")
+```
+
+Then, emotional loneliness factor separately:
+
+```{r}
+## FS
+# for context, repeating reliabilities for two-factor structure without lonely.A
+G_aloNe %>% 
+  select(empty.G, around.G, reject.G) %>% 
+  relisens(1, method = "score")
+  
+# with a model adding lonely.A
+G_aloNe_MOD1 <- G_aloNe %>% 
+  select(empty.G, around.G, reject.G, lonely.A) 
+G_aloNe_MOD1 %>% 
+  relisens(1, method = "score")
+
+
+# with a model replacing by lonely.A
+G_aloNe_MOD2 <- G_aloNe %>% 
+  select(empty.G, lonely.A, reject.G) 
+G_aloNe_MOD2 %>% 
+  relisens(1, method = "score")
+
+## SUMS
+source("crelisens.R")
+G_aloNe %>% 
+  select(empty.G, around.G, reject.G) %>% 
+  crelisens(4)
+
+# with a model adding lonely.A
+G_aloNe_MOD1 %>% crelisens(5)
+
+
+# with a model replacing by lonely.A
+G_aloNe_MOD2 %>% 
+  crelisens(4)
+
+
+asdf <- G_aloNe_MOD1 %>% psych::omega(1, fm="ml", rotate="oblimin", two.ok = TRUE, digit = 4)
+asdf$omega.tot
+asdf2 <- G_aloNe_MOD2 %>% psych::omega(1, fm="ml", rotate="oblimin", two.ok = TRUE)
+asdf2$omega.tot
+```
+
+And social loneliness factor separately:
+
+```{r}
+# for context, repeating reliabilities for two-factor structure without lonely.A
+G_aloNe %>% 
+   select(rely.G, trust.G, close.G) %>% 
+  relisens(1, method = "score")
+
+# adding lonely.A
+G_aloNe %>% 
+   select(rely.G, trust.G, close.G, lonely.A) %>% 
+  relisens(1, method = "score")
+```
+
+"Confirmatory" reliability coefficients
+
+With alone.A added:
+
+```{r}
+source("crelisens.R")
+crelisens(G_aloNe[-1], 4)
+```
+
+Without around.G:
+
+```{r}
+G_aloNe %>% select(-ID, -around.G) %>% crelisens(4)
+```
